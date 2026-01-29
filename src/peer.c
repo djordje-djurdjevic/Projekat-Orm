@@ -7,50 +7,134 @@
 #include <arpa/inet.h>      //inet_addr
 #include <fcntl.h>          //for open
 #include <unistd.h>         //for close
+#include <pthread.h>
+#include "segment.h"
 
-#define IP_ADDRESS "127.0.0.1"
-#define PORT 12345
+
+#define TRACKER_IP "127.0.0.1"
+#define TRACKER_PORT 12345
 #define DEFAULT_BUFLEN 512
+
+void *peer_server(void *arg) {
+    int port = *(int*)arg;
+    int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(port);
+    bind(sock_fd, (struct sockaddr*)&addr, sizeof(addr));
+    listen(sock_fd, 5);
+
+    while (1) {
+        int client_fd = accept(sock_fd, NULL, NULL);
+        unsigned char buffer[512];
+        FILE *fp = fopen("segments/segment_0.dat", "rb"); // primer, posalji prvi segment
+        size_t n;
+        while ((n = fread(buffer, 1, sizeof(buffer), fp)) > 0) {
+            send(client_fd, buffer, n, 0);
+        }
+        fclose(fp);
+        close(client_fd);
+    }
+    close(sock_fd);
+    return NULL;
+}
+
+//helper function
+int connect_to(char *ip, int port) {
+
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = inet_addr(ip);
+    if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("Connect failed"); return -1;
+    }
+    return sock;
+}
+
+
+//sending segment to peers
+void send_segment(char *filename, char *ip, int port) {
+    int sock = connect_to(ip, port);
+    if (sock < 0) return;
+
+    FILE *fp = fopen(filename, "rb");
+    if (!fp) { perror("Cannot open file"); close(sock); return; }
+
+    unsigned char buffer[DEFAULT_BUFLEN];
+    size_t n;
+    while ((n = fread(buffer, 1, DEFAULT_BUFLEN, fp)) > 0) {
+        send(sock, buffer, n, 0);
+    }
+    fclose(fp);
+    close(sock);
+}
+
+//getting segment from other peers
+void recv_segment(char *filename, char *ip, int port) {
+    int sock = connect_to(ip, port);
+    if (sock < 0) return;
+
+    FILE *fp = fopen(filename, "wb");
+    unsigned char buffer[DEFAULT_BUFLEN];
+    int n;
+    while ((n = recv(sock, buffer, DEFAULT_BUFLEN, 0)) > 0) {
+        fwrite(buffer, 1, n, fp);
+        if (n < DEFAULT_BUFLEN) break; // kraj fajla
+    }
+    fclose(fp);
+    close(sock);
+}
 
 int main() {
 
-    int client_socket_fd;
-    struct sockaddr_in server_address;
-    char message[DEFAULT_BUFLEN] = "ZEMOOOOOOO";
+    pthread_t tid;
+    int my_port = 40000; // port peer-a za primanje fajlove
+    pthread_create(&tid, NULL, peer_server, &my_port);
 
-    //create socket;
-    client_socket_fd = socket(AF_INET, SOCK_STREAM, 0 );
-    if (client_socket_fd == -1) {
-        perror("Socket creation failed");
-        return EXIT_FAILURE;
-    }
-    else {
-        printf("Socket successfully created\n\n");
-    }
 
-    server_address.sin_family      = AF_INET;
-    server_address.sin_addr.s_addr = inet_addr(IP_ADDRESS);
-    server_address.sin_port        = htons(PORT); 
+    //1. Split original file
+    split_file("files/test.txt", 512);
 
-    if (connect(client_socket_fd, (struct sockaddr *)&server_address , 
-    sizeof(server_address)) < 0 ) {
-        perror("Failed to connect");
-        return EXIT_FAILURE;
-    }
-    else {
-           printf("Successfully connected to server [%s:%hu]\n\n",
-            inet_ntoa(server_address.sin_addr), ntohs(server_address.sin_port));  
-    }
 
-    if(send(client_socket_fd, message, strlen(message), 0 ) < 0 ) {
-        printf("Message sending failed");
-    }
-    else {
-        printf("Message '%s' successfully sent to the server\n\n", message);
-    }
+    //2. Register segment at tracker
+    int sock = connect_to(TRACKER_IP, TRACKER_PORT);
+    if(sock <  0) return 1;
+    
 
-    close(client_socket_fd);
-    printf("Socket closed\n\n");
+    //Assume 3 segments
+    for(int i = 0; i < 3; i++) {
+        char msg[64];
+        sprintf(msg, "UPLOAD %d", i);
+        send(sock, msg, strlen(msg), 0);
+    }
+    close(sock);
+
+    //3. Downloading segments (example)
+    sock = connect_to(TRACKER_IP, TRACKER_PORT);
+    if (sock < 0) return 1;
+    for(int i = 0; i < 3; i++) {
+        char msg[64];
+        sprintf(msg, "GET %d", i);
+        send(sock, msg, strlen(msg), 0);
+
+        char resp[64];
+        int n = recv(sock, resp, sizeof(resp), 0);
+        resp[n] = '\0';
+        printf("Segment %d owner: %s\n", i, resp);
+
+        //seperate IP and port
+        char ip[16];
+        int port;
+        sscanf(resp, "%15[^:]:%d", ip, &port);
+
+        char filename[64];
+        sprintf(filename, "segments/segment_%d_downloaded.dat", i);
+        recv_segment(filename, ip, port);
+    }
+    close(sock);
 
     return 0;
 }
