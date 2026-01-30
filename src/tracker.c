@@ -6,16 +6,20 @@
 #include<sys/socket.h>
 #include<arpa/inet.h>
 #include<unistd.h>
+#include "segment.h"
+
 
 #define IP_ADDRESS "127.0.0.1"
 #define PORT 12345
 #define DEFAULT_BUFLEN 512
 #define MAX_PEERS 10
 #define MAX_SEGMENTS 100
+#define N 512 //Segment size predefined
 
 typedef struct {
     char ip[16];      // IP peer-a
     int port;         // port peer-a
+    int segmentIndex;
 } Peer;
 
 Peer segment_owners[MAX_SEGMENTS][MAX_PEERS];
@@ -23,6 +27,9 @@ int segment_count[MAX_SEGMENTS] = {0}; // koliko peer-a ima dati segment
 
 
 int main(){
+
+    //1. Split original file
+    split_file("files/test.txt", N);
 
     int server_socket_fd;
     int client_socket_fd;
@@ -77,9 +84,9 @@ int main(){
         while((read_size = recv(client_socket_fd, buffer, DEFAULT_BUFLEN, 0)) > 0) {
             buffer[read_size] = '\0';
             
-            if (strncmp(buffer, "GET", 3) == 0) {
+            if (strncmp(buffer, "GET", 3) == 0) { 
                 int seg;
-                sscanf(buffer + 4, "%d", &seg);
+                sscanf(buffer + 4, "%d", &seg); //gets the segm index in seg
                 if (segment_count[seg] > 0) {
                     char resp[64];
                     sprintf(resp, "%s:%d",

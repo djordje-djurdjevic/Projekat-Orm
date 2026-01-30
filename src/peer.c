@@ -8,7 +8,6 @@
 #include <fcntl.h>          //for open
 #include <unistd.h>         //for close
 #include <pthread.h>
-#include "segment.h"
 
 
 #define TRACKER_IP "127.0.0.1"
@@ -93,11 +92,6 @@ int main() {
     pthread_t tid;
     int my_port = 40000; // port peer-a za primanje fajlove
     pthread_create(&tid, NULL, peer_server, &my_port);
-
-
-    //1. Split original file
-    split_file("files/test.txt", 512);
-
 
     //2. Register segment at tracker
     int sock = connect_to(TRACKER_IP, TRACKER_PORT);

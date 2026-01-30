@@ -35,5 +35,5 @@ void split_file(const char *filename, int segment_size) {
     free(buffer);
     fclose(fp);
 
-    printf("File split into %d segments\n", segment_index);
+    printf("File split into %d segments.\n", segment_index);
 }
