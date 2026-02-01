@@ -53,12 +53,12 @@ One main client thread
 
 No shared memory between peers
 
-🛠️ Build & Run
-gcc tracker.c segment.c -o tracker -lpthread
+🛠️ Build & Run 
+gcc tracker.c segment.c -o tracker -lpthread 
 gcc peer.c -o peer -lpthread
 
-./tracker
-./peer   # run in multiple terminals
+ ./tracker
+ ./peer   # run in multiple terminals
 
 📡 Protocol
 
