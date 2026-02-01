@@ -95,7 +95,7 @@ int main() {
 
     //2. Register segment at tracker
     int sock = connect_to(TRACKER_IP, TRACKER_PORT);
-    if(sock <  0) return 1;
+    if(sock <  0) return EXIT_FAILURE;
     
 
     //Assume 3 segments
