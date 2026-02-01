@@ -8,7 +8,7 @@
 #include <unistd.h>         //for close
 
 #define SERVER_IP "127.0.0.1"
-#define SERVER_PORT 16666
+#define SERVER_PORT 18888
 #define BUFFER_LEN 512 
 #define MAX_THREADS 10
 #define SEGMENTS 6
@@ -17,8 +17,10 @@ void *PeerServer(void *arg) {
 
     int port = *(int *)arg;
     int sockFd = socket(AF_INET, SOCK_STREAM, 0 );
-    if(sockFd == -1) {perror("Socket creation failed."); return NULL;}
-    struct sockaddr_in address;    
+    struct sockaddr_in address;
+
+    if(sockFd < 0) {perror("Socket creation failed."); return NULL;}
+        
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
@@ -35,16 +37,17 @@ void *PeerServer(void *arg) {
             perror("accept failed");
             continue;
         }
-        //receive numb of segm, onda parsiranje
-        /*int seg;
-        recv(clientFd, &seg, sizeof(int), 0);
+    
+        int seg,net_seg;
+        int temp = recv(clientFd, &net_seg, sizeof(int), 0);
+        if(temp <  0) {continue;}
+        seg = ntohl(net_seg); //doesnt nee to be implemented for loopback address
 
         char filename[64];
         sprintf(filename, "segments/segment_%d.dat", seg);
         FILE *fp = fopen(filename, "rb");
-        */
+        
         unsigned char buffer[BUFFER_LEN];
-        FILE *fp = fopen("segments/segments_0.dat", "rb");
         size_t n;
         while((n = fread(buffer,  1, sizeof(buffer), fp)) > 0) {
             send(clientFd, buffer, n, 0);
@@ -60,7 +63,7 @@ void *PeerServer(void *arg) {
 int connect_to(char *ip, int port) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock == -1) {
-        printf("Scoket creation failed.");
+        printf("Socket creation failed.");
         return -1;
     }
     struct sockaddr_in address;
@@ -78,9 +81,12 @@ int connect_to(char *ip, int port) {
     return sock;
 }
 
-void recv_segment(char *filename, char *ip, int port) {
+void recv_segment(char *filename, char *ip, int port, int segment) {
     int sock = connect_to(ip, port);
     if (sock <  0) return;
+
+    int net_seg = htonl(segment);
+    if(send(sock, &net_seg, sizeof(segment), 0) < 0) {return;}
 
     FILE *fp = fopen(filename, "wb"); //write binary
     unsigned char buffer[BUFFER_LEN];
@@ -96,7 +102,9 @@ void recv_segment(char *filename, char *ip, int port) {
 pthread_t thread;
 
 int main() {
-    int peerPort = 20000 + rand() % 1000; //fiksno?
+
+    srand(time(NULL));
+    int peerPort = 20000 + rand() % 1000;
     pthread_create(&thread, NULL, PeerServer, (void *)&peerPort);
     pthread_detach(thread);
 
@@ -105,7 +113,7 @@ int main() {
 
 
     char buffer[BUFFER_LEN];
-    char message[32]; 
+    char messageGet[32]; 
     int segment;
     printf("-1 to disconnect.\n");
     while(1) {
@@ -115,14 +123,14 @@ int main() {
             scanf("%d", &segment);
         }while(segment < -1 || segment > SEGMENTS); 
         if(segment == -1) {break;}
-        snprintf(message, sizeof(message), "GET %d", segment);
+        snprintf(messageGet, sizeof(messageGet), "GET %d", segment);
 
         //sending which segment the port wants
-        if(send(clientSocketFd, message, strlen(message), 0) < 0) {
+        if(send(clientSocketFd, messageGet, strlen(messageGet), 0) < 0) {
             printf("Sending message failed.\n");
         }
         else {
-            printf("Message %s successfully sent.\n", message);
+            printf("Message %s successfully sent.\n", messageGet);
         }
 
         //recive ip:port
@@ -139,9 +147,20 @@ int main() {
 
 
         char filename[64];
-        sprintf(filename, "segments/segment_%d_downloaded.dat", segment);
-        recv_segment(filename, ip, port);
+        sprintf(filename, "peers/segment_%d_downloaded.dat", segment);
+        recv_segment(filename, ip, port, segment);
         //ovde POSLE MORA UPLOAD X
+        
+
+        //UPLOAD X segment
+        char messageUpload[32];
+        snprintf(messageUpload, sizeof(messageUpload), "UPLOAD %d", segment);
+        if(send(clientSocketFd, messageUpload, strlen(messageUpload), 0) < 0) {
+            printf("Sending message failed.\n");
+            }
+        else {
+            printf("Message %s successfully sent.\n", messageUpload);
+        }
     }    
 
     close(clientSocketFd);

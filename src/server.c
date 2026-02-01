@@ -9,8 +9,8 @@
 #include <stdbool.h>
 
 #define SERVER_IP "127.0.0.1"
-#define SERVER_PORT 16666
-#define PEER_SERVER_PORT 20000
+#define SERVER_PORT 18888
+#define PEER_SERVER_PORT 22222
 #define BUFFER_LEN 512
 #define N 512 //the length of segment in bytes
 #define MAX_THREADS 10
@@ -36,7 +36,11 @@ typedef struct {
 ThreadArgs threadArgs[MAX_OWNERS];
 
 pthread_t threads[MAX_THREADS];
+pthread_t peerThread;
 pthread_mutex_t mutex;
+
+int CreateSocket();
+int BindSocket(int, struct sockaddr_in  *);
  
 void *ServerFunction(void *arg) {
     ThreadArgs *args = (ThreadArgs *)arg; 
@@ -104,14 +108,71 @@ void *ServerFunction(void *arg) {
         else if(strncmp(buffer, "UPLOAD", 6) == 0) {
             int i;
             sscanf(buffer + 7, "%d", &i);
-
             pthread_mutex_lock(&mutex);
-            segment_owners[peerId].segmentIndex[i] = true; //the peer has the i-th segment
-            ++segment_count[i];
+            if (!segment_owners[peerId].segmentIndex[i]) { //if it was already added
+                segment_owners[peerId].segmentIndex[i] = true;
+                segment_count[i]++;
+            }
             pthread_mutex_unlock(&mutex);
         }
     }
     close(clientSocketFd);
+    return NULL;
+}
+
+void *PeerServer(void *arg) {
+    
+    int port = *(int *)arg;
+    int serverSocketFd;
+    int clientFd;
+    struct sockaddr_in serverAddress;
+    struct sockaddr_in clientAddress;
+    socklen_t len = sizeof(struct sockaddr_in);
+
+    serverSocketFd = CreateSocket(); 
+
+    serverAddress.sin_family      = AF_INET;
+    serverAddress.sin_addr.s_addr = INADDR_ANY;
+    serverAddress.sin_port        = htons(port);
+
+    int opt = 1; //ako brzo upalis i ugasis bind failed zato ovo
+    setsockopt(serverSocketFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+
+    if(BindSocket(serverSocketFd, &serverAddress) < 0) {return NULL;} 
+    listen(serverSocketFd, 5);//listen - max to wait before accept 5
+    
+    while(1) {
+        clientFd = accept(serverSocketFd,
+        (struct sockaddr *)&clientAddress, (socklen_t *)&len);
+        if (clientFd < 0) {
+            perror("Accept client failed.");
+            continue;
+        }
+        else {
+            printf("Client [%s:%hu] connection accepted\n\n", inet_ntoa(clientAddress.sin_addr), ntohs(clientAddress.sin_port));
+        }
+
+
+        int seg,net_seg;
+        int temp = recv(clientFd, &net_seg, sizeof(int), 0);
+        if(temp <  0) {continue;}
+        seg = ntohl(net_seg); //doesnt need to be implemented for loopback address
+
+        char filename[64];
+        sprintf(filename, "segments/segment_%d.dat", seg);
+        FILE *fp = fopen(filename, "rb");
+        
+        unsigned char buffer[BUFFER_LEN];
+        size_t n;
+        while((n = fread(buffer,  1, sizeof(buffer), fp)) > 0) {
+            send(clientFd, buffer, n, 0);
+        }
+        fclose(fp);
+        close(clientFd);
+        
+    }
+
     return NULL;
 }
 
@@ -120,8 +181,11 @@ void *ServerFunction(void *arg) {
 
 int main() {
 
-    pthread_mutex_init(&mutex, NULL); //ovo sutra dodati funkciju
-    //pthread_create(&peerThread, NULL, PeerServer, &serverPeerPort);
+    //int *port = malloc(sizeof(int)); needs to be dinamicly alocated?
+    pthread_mutex_init(&mutex, NULL); 
+    int tempPort = PEER_SERVER_PORT;
+    pthread_create(&peerThread, NULL, PeerServer, (void *)&tempPort);
+    
     //spliting the file into the segments
     split_file("files/test.txt", N);
 
@@ -140,28 +204,16 @@ int main() {
     int clientT[MAX_THREADS];
 
 
-    serverSocketFd = socket(AF_INET, SOCK_STREAM, 0);
-    if(serverSocketFd == 1) {
-        perror("Socket creation failed.");
-        return EXIT_FAILURE;
-    }
+    serverSocketFd = CreateSocket(); 
+    if (serverSocketFd < 0) {return EXIT_FAILURE;}
 
     serverAddress.sin_family      = AF_INET;
     serverAddress.sin_addr.s_addr = INADDR_ANY;
     serverAddress.sin_port        = htons(SERVER_PORT);
 
-    if(bind(serverSocketFd, (struct sockaddr *)&serverAddress,
-    sizeof(serverAddress)) < 0) {
-        perror("Bind failed.");
-        return EXIT_FAILURE;
-    }
-    else {
-        printf("Socket bound successfully to [%s:%hu]\n\n",
-        inet_ntoa(serverAddress.sin_addr), ntohs(serverAddress.sin_port));
-    }
+    if(BindSocket(serverSocketFd, &serverAddress) < 0) {return EXIT_FAILURE;} 
+    listen(serverSocketFd, 5);     //listen - max to wait before accept 5
 
-    //listen - max to wait before accept 5
-    listen(serverSocketFd, 5);
 
     while (1) {
         clientT[counter] = accept(serverSocketFd,
@@ -175,14 +227,20 @@ int main() {
         }
 
 
+    
+        pthread_mutex_lock(&mutex);
+        int myId = segmentOwnerCounter;
+        segmentOwnerCounter++;
+        pthread_mutex_unlock(&mutex);
+
         //Save ip:port of peers for later use
-        strcpy(segment_owners[segmentOwnerCounter].ip , inet_ntoa(clientAddress.sin_addr));
-        segment_owners[segmentOwnerCounter].port = ntohs(clientAddress.sin_port);
+        inet_ntop(AF_INET, &clientAddress.sin_addr, //inet_top instead of inet_ntoa (thread safe), strcpy(segment_owners[myId].ip, inet_ntoa(clientAddress.sin_addr)); 
+                            segment_owners[myId].ip,
+                            sizeof(segment_owners[myId].ip));
+        segment_owners[myId].port = ntohs(clientAddress.sin_port);
 
-        threadArgs[segmentOwnerCounter].socket = clientT[counter];
-        threadArgs[segmentOwnerCounter].peerId = segmentOwnerCounter;
-
-        ++segmentOwnerCounter; //thread safe
+        threadArgs[myId].socket = clientT[counter];
+        threadArgs[myId].peerId = myId;
 
 
         
@@ -190,7 +248,7 @@ int main() {
         pthread_detach(threads[counter]);
         counter++;
 
-        if(counter > 9) {break;} //too much clients connected
+        if (counter >= MAX_THREADS) break; //too many clients
     }
 
 
@@ -198,5 +256,28 @@ int main() {
     close(serverSocketFd);
     printf("Server socket closed\n\n");
 
+    return 0;
+}
+
+int CreateSocket() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if(sock < 0) {
+        perror("Socket creation failed.");
+        return EXIT_FAILURE;
+    }
+
+    return sock;
+}
+
+int BindSocket(int serverSocketFd, struct sockaddr_in  *serverAddress) {
+    if(bind(serverSocketFd, (struct sockaddr *)serverAddress,
+    sizeof(*serverAddress)) < 0) {
+        perror("Bind failed.");
+        return -1;
+    }
+    else {
+        printf("Socket bound successfully to [%s:%hu]\n\n",
+        inet_ntoa(serverAddress->sin_addr), ntohs(serverAddress->sin_port));
+    }
     return 0;
 }
