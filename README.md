@@ -1,169 +1,91 @@
 # Projekat-Orm (Peer-to-Peer File Sharing System (TCP))
+📌 Overview
+
 This project implements a Peer-to-Peer (P2P) file sharing system in C using TCP sockets and POSIX threads.
-The system is based on a tracker–peer architecture, where a central tracker coordinates peers, while the actual file transfer happens directly between peers.
+It follows a tracker–peer architecture where a central tracker manages metadata, while all file transfers occur directly between peers.
 
-📌 System Architecture
+🧱 Architecture
+Tracker (Control Plane)
 
-The system consists of three clearly separated roles:
+Tracks which peer owns which file segments
 
-1️⃣ Tracker (Central Server)
+Handles:
 
-The tracker is responsible for metadata management only.
+GET <segment_id> → returns ip:port of a peer
 
-Responsibilities:
+UPLOAD <segment_id> → registers segment ownership
 
-Keeps track of which peer owns which file segments
+Never transfers file data
 
-Handles peer requests:
+Peer
 
-GET <segment_id> – returns ip:port of a peer that owns the segment
+Each peer has two roles:
 
-UPLOAD <segment_id> – registers that a peer now owns a segment
+Peer Server (thread): sends binary file segments to other peers
 
-Does not transfer file data
-
-The tracker acts as a control plane, not a data source.
-
-2️⃣ Peer Server
-
-Each peer runs its own lightweight peer server in a separate thread.
-
-Responsibilities:
-
-Listens on a dedicated TCP port
-
-Sends requested file segments to other peers
-
-Transfers raw binary data (no text protocol)
-
-Peer servers form the data plane of the system.
-
-3️⃣ Peer Client
-
-The peer client logic coordinates communication.
-
-Workflow:
-
-Connects to the tracker
-
-Requests a segment (GET)
-
-Receives peer address (ip:port)
-
-Connects directly to the peer server
-
-Downloads the segment
-
-Notifies the tracker (UPLOAD)
+Peer Client (main thread): communicates with the tracker and downloads segments
 
 🔌 Network Design
 Component	Purpose	Port
 Tracker	Metadata & coordination	16666
-Peer Server	Segment transfer	Random / peer-specific
+Peer Server	Segment transfer	Peer-specific
 
-Each socket connection has exactly one responsibility, ensuring a clean and deadlock-free design.
+Each socket has a single responsibility, ensuring a clean and deadlock-free design.
 
 📂 File Segmentation
 
-The original file is split into fixed-size segments (default: 512 bytes)
+File is split into fixed-size binary segments (512 bytes)
 
-Segments are stored as binary files:
+Stored as:
+segments/segment_0.dat, segment_1.dat, …
 
-segments/segment_0.dat
-segments/segment_1.dat
-...
+Transfers use raw binary send() / recv()
 
+🔒 Concurrency
 
-Transfers are done using binary send() / recv() calls
+Tracker: multi-threaded (one thread per peer), protected by a mutex
 
-🔒 Concurrency & Thread Safety
+Peer:
 
-The tracker is multi-threaded
+One server thread
 
-One thread per connected peer
+One main client thread
 
-Shared metadata protected using a mutex
-
-Peers use:
-
-One thread for the peer server
-
-One main thread for user interaction
-
-No shared memory between peers → no mutex needed on the peer side
+No shared memory between peers
 
 🛠️ Build & Run
-Compile
 gcc tracker.c segment.c -o tracker -lpthread
 gcc peer.c -o peer -lpthread
 
-Run Tracker
 ./tracker
+./peer   # run in multiple terminals
 
-Run Peers (in separate terminals)
-./peer
+📡 Protocol
 
-📡 Protocol Overview
-Tracker Protocol (Text-based)
+Tracker (text):
+
 GET <segment_id>
+
 UPLOAD <segment_id>
 
-Peer-to-Peer Protocol (Binary)
+Peer-to-peer (binary):
 
-Peer sends:
+Peer sends: int segment_id (network byte order)
 
-int segment_id (network byte order)
-
-
-Peer server responds:
-
-raw binary segment data
-
-🎯 Key Design Principles
-
-Clear separation of concerns
-
-Tracker never sends file data
-
-Peers communicate directly
-
-One socket = one responsibility
-
-Thread-safe shared state
-
-Modular and extensible architecture
-
-🚀 Possible Extensions
-
-Downloading segments from multiple peers (swarming)
-
-Load balancing / peer selection strategies
-
-Checksum-based segment verification
-
-Peer disconnect handling
-
-Replication strategies
+Peer server responds: raw segment data
 
 ⚠️ Known Issues
 
-No fault tolerance
-If a peer disconnects unexpectedly, the tracker is not notified and may still advertise that peer as a valid segment owner.
+No fault tolerance for peer disconnects
 
-No verification of segment integrity
-Downloaded segments are not validated using checksums or hashes, so corrupted transfers are not detected.
+No checksum or integrity verification
 
-Single-segment download at a time
-A peer downloads one segment at a time. Parallel downloads (swarming) are not implemented.
+Single-segment downloads only (no swarming)
 
-Simple peer selection strategy
-The tracker always returns the first peer found with the requested segment. There is no load balancing or randomness.
+Simple peer selection (no load balancing)
 
-No timeout handling
-Socket operations (connect, recv, send) do not use timeouts, which may cause blocking in edge cases.
+No socket timeouts
 
-Static limits
-The maximum number of peers and segments is fixed at compile time.
+Static limits on peers and segments
 
 Tracker is a single point of failure
-If the tracker goes down, peers cannot discover each other, even if they already have segments.
