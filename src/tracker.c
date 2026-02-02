@@ -191,13 +191,11 @@ int main() {
 
 
     int serverSocketFd;
-    int clientSocketFd;
 
     struct sockaddr_in serverAddress;
     struct sockaddr_in clientAddress;
 
     socklen_t len = sizeof(struct sockaddr_in);
-    char buffer[BUFFER_LEN];
 
     //for threads
     int counter = 0;
