@@ -11,7 +11,7 @@
 #define SERVER_PORT 18888
 #define BUFFER_LEN 512 
 #define MAX_THREADS 10
-#define SEGMENTS 6
+#define SEGMENTS 5
 
 void *PeerServer(void *arg) {
 
@@ -19,14 +19,14 @@ void *PeerServer(void *arg) {
     int sockFd = socket(AF_INET, SOCK_STREAM, 0 );
     struct sockaddr_in address;
 
-    if(sockFd < 0) {perror("Socket creation failed."); return NULL;}
+    if(sockFd < 0) {perror("Socket creation failed.\n"); return NULL;}
         
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
     
     if(bind(sockFd, (struct sockaddr*)&address, sizeof(address)) < 0) {
-        perror("Bind error.");
+        perror("Bind error.\n");
         return NULL;
     }
     listen(sockFd, 5);
@@ -34,7 +34,7 @@ void *PeerServer(void *arg) {
     while(1) {
         int clientFd = accept(sockFd, NULL, NULL);
         if (clientFd < 0) {
-            perror("accept failed");
+            perror("accept failed\n");
             continue;
         }
     
@@ -60,26 +60,28 @@ void *PeerServer(void *arg) {
     return NULL;
 }
 
+
 int connect_to(char *ip, int port) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock == -1) {
-        printf("Socket creation failed.");
+        printf("Socket creation failed.\n");
         return -1;
     }
     struct sockaddr_in address;
     address.sin_addr.s_addr = inet_addr(ip);
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
-    if(connect(sock, (struct sockaddr*)&address, sizeof(address)) < 0) {
-        perror("Connect failed."); 
+    if(connect(sock, (struct sockaddr*)&address, sizeof(address)) < 0) { //FIX this when called from recv_segment function
+        perror("Connect failed.\n"); 
         return -1;
     }
     else{
-        printf("Successfully connected to server [%s:%hu]\n\n",
+        printf("Successfully connected to server [%s:%hu]\n",
         inet_ntoa(address.sin_addr), ntohs(address.sin_port));
     }
     return sock;
 }
+
 
 void recv_segment(char *filename, char *ip, int port, int segment) {
     int sock = connect_to(ip, port);
@@ -104,6 +106,8 @@ pthread_t thread;
 int main() {
 
     srand(time(NULL));
+    int peerDistinguisher = rand() % 100;
+
     int peerPort = 20000 + rand() % 1000;
     pthread_create(&thread, NULL, PeerServer, (void *)&peerPort);
     pthread_detach(thread);
@@ -117,9 +121,9 @@ int main() {
     int segment;
     printf("-1 to disconnect.\n");
     while(1) {
-        printf("Choose the segment: \n");
 
         do{
+            printf("Choose the segment range(0 to %d): ", SEGMENTS - 1);
             scanf("%d", &segment);
         }while(segment < -1 || segment > SEGMENTS); 
         if(segment == -1) {break;}
@@ -142,14 +146,13 @@ int main() {
         char ip[16];
         int port;
         if (sscanf(buffer, "%15[^:]:%d", ip, &port) != 2) {
-            printf("Neispravan format peer adrese\n");
-        }   //oke?
+            printf("Wrong format for addres:port\n");
+        }   
 
 
         char filename[64];
-        sprintf(filename, "peers/segment_%d_downloaded.dat", segment);
+        sprintf(filename, "peers/peer_%d_segment_%d_downloaded.dat", peerDistinguisher, segment); 
         recv_segment(filename, ip, port, segment);
-        //ovde POSLE MORA UPLOAD X
         
 
         //UPLOAD X segment

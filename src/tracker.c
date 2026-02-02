@@ -15,7 +15,7 @@
 #define N 512 //the length of segment in bytes
 #define MAX_THREADS 10
 #define MAX_OWNERS 10
-#define SEGMENTS 6
+#define SEGMENTS 5
 
 typedef struct {
     char ip[16];    // "xxx.xxx.xxx.xxx\0"
@@ -146,11 +146,11 @@ void *PeerServer(void *arg) {
         clientFd = accept(serverSocketFd,
         (struct sockaddr *)&clientAddress, (socklen_t *)&len);
         if (clientFd < 0) {
-            perror("Accept client failed.");
+            perror("Accept client failed.\n");
             continue;
         }
         else {
-            printf("Client [%s:%hu] connection accepted\n\n", inet_ntoa(clientAddress.sin_addr), ntohs(clientAddress.sin_port));
+            printf("Client [%s:%hu] connection accepted\n", inet_ntoa(clientAddress.sin_addr), ntohs(clientAddress.sin_port));
         }
 
 
@@ -217,11 +217,11 @@ int main() {
         clientT[counter] = accept(serverSocketFd,
         (struct sockaddr *)&clientAddress, (socklen_t *)&len);
         if (clientT[counter] < 0) {
-            perror("Accept client failed.");
+            perror("Accept client failed.\n");
             continue;
         }
         else {
-            printf("Client [%s:%hu] connection accepted\n\n", inet_ntoa(clientAddress.sin_addr), ntohs(clientAddress.sin_port));
+            printf("Client [%s:%hu] connection accepted\n", inet_ntoa(clientAddress.sin_addr), ntohs(clientAddress.sin_port));
         }
 
 
@@ -252,7 +252,7 @@ int main() {
 
     pthread_mutex_destroy(&mutex);
     close(serverSocketFd);
-    printf("Server socket closed\n\n");
+    printf("Server socket closed\n");
 
     return 0;
 }
@@ -260,7 +260,7 @@ int main() {
 int CreateSocket() {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock < 0) {
-        perror("Socket creation failed.");
+        perror("Socket creation failed.\n");
         return EXIT_FAILURE;
     }
 
@@ -270,11 +270,11 @@ int CreateSocket() {
 int BindSocket(int serverSocketFd, struct sockaddr_in  *serverAddress) {
     if(bind(serverSocketFd, (struct sockaddr *)serverAddress,
     sizeof(*serverAddress)) < 0) {
-        perror("Bind failed.");
+        perror("Bind failed.\n");
         return -1;
     }
     else {
-        printf("Socket bound successfully to [%s:%hu]\n\n",
+        printf("Socket bound successfully to [%s:%hu]\n",
         inet_ntoa(serverAddress->sin_addr), ntohs(serverAddress->sin_port));
     }
     return 0;
