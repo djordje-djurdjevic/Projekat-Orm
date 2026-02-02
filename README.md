@@ -1,80 +1,53 @@
-# Projekat-Orm (Peer-to-Peer File Sharing System (TCP))
-📌 Overview
+# Projekat-Orm(Peer-to-Peer File Sharing System TCP)
+Overview
 
-This project implements a Peer-to-Peer (P2P) file sharing system in C using TCP sockets and POSIX threads.
+This project implements a Peer-to-Peer (P2P) file sharing system in C using TCP sockets and POSIX threads.  
 It follows a tracker–peer architecture where a central tracker manages metadata, while all file transfers occur directly between peers.
 
-🧱 Architecture
-Tracker (Control Plane)
 
-Tracks which peer owns which file segments
 
-Handles:
+Architecture
 
-GET <segment_id> → returns ip:port of a peer
+Tracker  
+tracks which peer owns which file segments
 
-UPLOAD <segment_id> → registers segment ownership
+Handles:  
+GET <segment_id> → returns ip:port of a peer  
+UPLOAD <segment_id> → registers segment ownership  
+Never transfers file data  
 
-Never transfers file data
 
-Peer
+Peer  
+Each peer has two roles:  
+Peer Server (thread): sends binary file segments to other peers  
+Peer Client (main thread): communicates with the tracker and downloads segments  
 
-Each peer has two roles:
 
-Peer Server (thread): sends binary file segments to other peers
 
-Peer Client (main thread): communicates with the tracker and downloads segments
-
-🔌 Network Design
-Component	Purpose	Port
-Tracker	Metadata & coordination	16666
-Peer Server	Segment transfer	Peer-specific
-
-Each socket has a single responsibility, ensuring a clean and deadlock-free design.
-
-📂 File Segmentation
-
+File Segmentation  
 File is split into fixed-size binary segments (512 bytes)
 
-Stored as:
-segments/segment_0.dat, segment_1.dat, …
 
-Transfers use raw binary send() / recv()
 
-🔒 Concurrency
+Concurrency  
+Each socket has a single responsibility, ensuring a clean and deadlock-free design.  
+Tracker: multi-threaded (one thread per peer), protected by a mutex  
 
-Tracker: multi-threaded (one thread per peer), protected by a mutex
+Peer:  
+One server thread  
+One main client thread  
+No shared memory between peers  
 
-Peer:
+Build & Run  
+- `make all` – compiles everything and creates the executables `tracker` and `peer`.
+- You can also compile separately using `make tracker` or `make peer`.
+- `make clean` – removes all generated files.
 
-One server thread
-
-One main client thread
-
-No shared memory between peers
-
-🛠️ Build & Run 
-gcc tracker.c segment.c -o tracker -lpthread 
-gcc peer.c -o peer -lpthread
-
- ./tracker
+ ./tracker  
  ./peer   # run in multiple terminals
 
-📡 Protocol
 
-Tracker (text):
-
-GET <segment_id>
-
-UPLOAD <segment_id>
-
-Peer-to-peer (binary):
-
-Peer sends: int segment_id (network byte order)
-
-Peer server responds: raw segment data
-
-⚠️ Known Issues
+Known Issues:
 
 No fault tolerance for peer disconnects
 
