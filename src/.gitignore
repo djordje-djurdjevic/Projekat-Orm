@@ -1,0 +1,23 @@
+# Executables 
+tracker
+peer
+
+# Object files
+*.o
+
+# Ignore everything inside
+segments/*
+peers/*
+
+# But keep the directories themselves
+!segments/.gitkeep
+!peers/.gitkeep
+
+# Logs / temp
+*.log
+*.tmp
+
+# Editor / OS junk
+*.swp
+*~
+.DS_Store
