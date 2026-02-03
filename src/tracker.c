@@ -23,9 +23,8 @@ typedef struct {
     bool segmentIndex[SEGMENTS];
 } Peer;
 
-int segmentOwnerCounter = 0;
-Peer segment_owners[MAX_OWNERS] = {0};
-int segment_count[SEGMENTS] = {0};
+Peer segmentOwners[MAX_OWNERS] = {0};
+int segmentCount[SEGMENTS] = {0};
 
 
 typedef struct {
@@ -71,14 +70,14 @@ void *ServerFunction(void *arg) {
             bool found = false;
             //race coniditon segment_count and segment_owners[i].segmentIndex[seg]
             pthread_mutex_lock(&mutex);
-            if(segment_count[seg]  > 0) //
+            if(segmentCount[seg]  > 0) //
             {
                 for(int i = 0; i < MAX_OWNERS; i++) {
 
-                    if(segment_owners[i].segmentIndex[seg]) { 
+                    if(segmentOwners[i].segmentIndex[seg]) { 
       
                         snprintf(ipSERVER_PORT, sizeof(ipSERVER_PORT), "%s:%d", 
-                        segment_owners[i].ip, segment_owners[i].port);
+                        segmentOwners[i].ip, segmentOwners[i].port);
                         found = true;
                         break;                     
                     }
@@ -109,14 +108,19 @@ void *ServerFunction(void *arg) {
             int i;
             sscanf(buffer + 7, "%d", &i);
             pthread_mutex_lock(&mutex);
-            if (!segment_owners[peerId].segmentIndex[i]) { //if it was already added
-                segment_owners[peerId].segmentIndex[i] = true;
-                segment_count[i]++;
+            if (!segmentOwners[peerId].segmentIndex[i]) { //if it was already added
+                segmentOwners[peerId].segmentIndex[i] = true;
+                segmentCount[i]++;
             }
             pthread_mutex_unlock(&mutex);
         }
     }
     close(clientSocketFd);
+
+    for(int i = 0; i < SEGMENTS; i++) {
+        segmentOwners[peerId].segmentIndex[i] = false; 
+    }
+
     return NULL;
 }
 
@@ -135,7 +139,7 @@ void *PeerServer(void *arg) {
     serverAddress.sin_addr.s_addr = INADDR_ANY;
     serverAddress.sin_port        = htons(port);
 
-    int opt = 1; //ako brzo upalis i ugasis bind failed zato ovo
+    int opt = 1; //fix  <=>  Bind failed: Address already in use
     setsockopt(serverSocketFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
 
@@ -176,12 +180,11 @@ void *PeerServer(void *arg) {
     return NULL;
 }
 
-/*printf("[DEBUG] Peer %s:%d registered with ID %d\n", 
-       segment_owners[peerId].ip, segment_owners[peerId].port, peerId);*/
+
+
 
 int main() {
 
-    //int *port = malloc(sizeof(int)); needs to be dinamicly alocated?
     pthread_mutex_init(&mutex, NULL); 
     int tempPort = PEER_SERVER_PORT;
     pthread_create(&peerThread, NULL, PeerServer, (void *)&tempPort);
@@ -197,6 +200,9 @@ int main() {
 
     socklen_t len = sizeof(struct sockaddr_in);
 
+    int segmentOwnerCounter = 0;
+    int peerPort;
+
     //for threads
     int counter = 0;
     int clientT[MAX_THREADS];
@@ -209,11 +215,15 @@ int main() {
     serverAddress.sin_addr.s_addr = INADDR_ANY;
     serverAddress.sin_port        = htons(SERVER_PORT);
 
+    int opt = 1; //fix  <=>  Bind failed: Address already in use
+    setsockopt(serverSocketFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
     if(BindSocket(serverSocketFd, &serverAddress) < 0) {return EXIT_FAILURE;} 
     listen(serverSocketFd, 5);     //listen - max to wait before accept 5
 
-
+    
     while (1) {
+
         clientT[counter] = accept(serverSocketFd,
         (struct sockaddr *)&clientAddress, (socklen_t *)&len);
         if (clientT[counter] < 0) {
@@ -224,8 +234,9 @@ int main() {
             printf("Client [%s:%hu] connection accepted\n", inet_ntoa(clientAddress.sin_addr), ntohs(clientAddress.sin_port));
         }
 
+        int temp = recv(clientT[counter], &peerPort, sizeof(int), 0);
+        if(temp <  0) {continue;}
 
-    
         pthread_mutex_lock(&mutex);
         int myId = segmentOwnerCounter;
         segmentOwnerCounter++;
@@ -233,9 +244,9 @@ int main() {
 
         //Save ip:port of peers for later use
         inet_ntop(AF_INET, &clientAddress.sin_addr, //inet_top instead of inet_ntoa (thread safe), strcpy(segment_owners[myId].ip, inet_ntoa(clientAddress.sin_addr)); 
-                            segment_owners[myId].ip,
-                            sizeof(segment_owners[myId].ip));
-        segment_owners[myId].port = ntohs(clientAddress.sin_port);
+                            segmentOwners[myId].ip,
+                            sizeof(segmentOwners[myId].ip));
+        segmentOwners[myId].port = peerPort;
 
         threadArgs[myId].socket = clientT[counter];
         threadArgs[myId].peerId = myId;
@@ -256,6 +267,8 @@ int main() {
 
     return 0;
 }
+
+
 
 int CreateSocket() {
     int sock = socket(AF_INET, SOCK_STREAM, 0);

@@ -4,19 +4,19 @@
 #include <sys/socket.h>     //socket
 #include <arpa/inet.h>      //inet_addr
 #include <fcntl.h>          //for open
-#include <pthread.h>
+#include <pthread.h>        //threads
 #include <unistd.h>         //for close
 
 #define SERVER_IP "127.0.0.1"
 #define SERVER_PORT 18888
 #define BUFFER_LEN 512 
-#define MAX_THREADS 10
 #define SEGMENTS 5
 
 void *PeerServer(void *arg) {
 
     int port = *(int *)arg;
     int sockFd = socket(AF_INET, SOCK_STREAM, 0 );
+    if(sockFd < 0) {perror("Socket creation failed.\n"); return NULL;}
     struct sockaddr_in address;
 
     if(sockFd < 0) {perror("Socket creation failed.\n"); return NULL;}
@@ -38,10 +38,10 @@ void *PeerServer(void *arg) {
             continue;
         }
     
-        int seg,net_seg;
-        int temp = recv(clientFd, &net_seg, sizeof(int), 0);
+        int seg,netSeg;
+        int temp = recv(clientFd, &netSeg, sizeof(int), 0);
         if(temp <  0) {continue;}
-        seg = ntohl(net_seg); //doesnt nee to be implemented for loopback address
+        seg = ntohl(netSeg); //doesnt nee to be implemented for loopback address
 
         char filename[64];
         sprintf(filename, "segments/segment_%d.dat", seg);
@@ -76,7 +76,7 @@ int connect_to(char *ip, int port) {
         return -1;
     }
     else{
-        printf("Successfully connected to server [%s:%hu]\n",
+        printf("Connected to the server [%s:%hu]\n",
         inet_ntoa(address.sin_addr), ntohs(address.sin_port));
     }
     return sock;
@@ -115,6 +115,8 @@ int main() {
     int clientSocketFd = connect_to(SERVER_IP, SERVER_PORT);
     if(clientSocketFd <  0) {return EXIT_FAILURE;}
 
+    if(send(clientSocketFd, &peerPort, sizeof(int), 0) < 0) {return EXIT_FAILURE;}   //sends the port of the PeerServer
+    
 
     char buffer[BUFFER_LEN];
     char messageGet[32]; 
