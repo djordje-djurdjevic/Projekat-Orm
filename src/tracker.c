@@ -62,7 +62,7 @@ void *ServerFunction(void *arg) {
         buffer[readSize] = '\0';
         
         if(strncmp(buffer, "GET", 3) == 0) {
-            char ipSERVER_PORT[32];
+            char IP_PORT[32];
             int seg;
             sscanf(buffer + 4, "%d", &seg); //get the segment needed
 
@@ -76,7 +76,7 @@ void *ServerFunction(void *arg) {
 
                     if(segmentOwners[i].segmentIndex[seg]) { 
       
-                        snprintf(ipSERVER_PORT, sizeof(ipSERVER_PORT), "%s:%d", 
+                        snprintf(IP_PORT, sizeof(IP_PORT), "%s:%d", 
                         segmentOwners[i].ip, segmentOwners[i].port);
                         found = true;
                         break;                     
@@ -86,21 +86,21 @@ void *ServerFunction(void *arg) {
             pthread_mutex_unlock(&mutex);
 
             if(found) {
-                if(send(clientSocketFd, ipSERVER_PORT, strlen(ipSERVER_PORT), 0) < 0) {
+                if(send(clientSocketFd, IP_PORT, strlen(IP_PORT), 0) < 0) {
                     printf("Sending message failed.\n");
                 }       
                 else {
-                    printf("Message %s successfully sent{PEER}.\n", ipSERVER_PORT);
+                    printf("Message %s successfully sent{PEER}.\n", IP_PORT);
                 }   
             }
             else{ //none of the peers have the segment server sends ip:prot
                 //sending server ip:SERVER_PORT
-                snprintf(ipSERVER_PORT, sizeof(ipSERVER_PORT), "%s:%d", SERVER_IP, PEER_SERVER_PORT);
-                if(send(clientSocketFd, ipSERVER_PORT, strlen(ipSERVER_PORT), 0) < 0) {
+                snprintf(IP_PORT, sizeof(IP_PORT), "%s:%d", SERVER_IP, PEER_SERVER_PORT);
+                if(send(clientSocketFd, IP_PORT, strlen(IP_PORT), 0) < 0) {
                     printf("Sending message failed.\n");
                 }       
                 else {
-                    printf("Message %s successfully sent{SERVER}.\n", ipSERVER_PORT);
+                    printf("Message %s successfully sent{SERVER}.\n", IP_PORT);
                 }     
             }
         }
