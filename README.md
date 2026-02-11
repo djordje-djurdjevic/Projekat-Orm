@@ -49,8 +49,6 @@ Build & Run
 
 Known Issues:
 
-No fault tolerance for peer disconnects
-
 No checksum or integrity verification
 
 Single-segment downloads only (no swarming)
