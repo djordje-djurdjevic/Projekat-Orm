@@ -70,7 +70,7 @@ void *ServerFunction(void *arg) {
             bool found = false;
             //race coniditon segment_count and segment_owners[i].segmentIndex[seg]
             pthread_mutex_lock(&mutex);
-            if(segmentCount[seg]  > 0) //
+            if(segmentCount[seg]  > 0) 
             {
                 for(int i = 0; i < MAX_OWNERS; i++) {
 
@@ -94,7 +94,7 @@ void *ServerFunction(void *arg) {
                 }   
             }
             else{ //none of the peers have the segment server sends ip:prot
-                //sending server ip:SERVER_PORT
+                //sending server ip:port
                 snprintf(IP_PORT, sizeof(IP_PORT), "%s:%d", SERVER_IP, PEER_SERVER_PORT);
                 if(send(clientSocketFd, IP_PORT, strlen(IP_PORT), 0) < 0) {
                     printf("Sending message failed.\n");

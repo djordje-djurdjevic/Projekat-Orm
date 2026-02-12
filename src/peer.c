@@ -71,7 +71,7 @@ int connect_to(char *ip, int port) {
     address.sin_addr.s_addr = inet_addr(ip);
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
-    if(connect(sock, (struct sockaddr*)&address, sizeof(address)) < 0) { //FIX this when called from recv_segment function
+    if(connect(sock, (struct sockaddr*)&address, sizeof(address)) < 0) { 
         perror("Connect failed.\n"); 
         return -1;
     }
@@ -172,4 +172,3 @@ int main() {
     printf("Socket closed\n\n");
     return 0;
 }
-
